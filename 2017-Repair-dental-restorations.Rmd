@@ -14,17 +14,11 @@ output:
 # Paquetes
 ```{r, include = F, echo = F}
 Packages <- c("tidyverse", "forcats", "stringr", "broom", "meta")
-}lapply(Packages, library, character.only = TRUE)
+lapply(Packages, library, character.only = TRUE)
 rm(Packages)
 ```
 
-Otros paquetes
-ggplotAssist
-dplyrAssist
-funModeling 
 
-
-ver https://livebook.datascienceheroes.com/
 
 Plots
 ```{r, include = F, echo = F}
@@ -78,8 +72,8 @@ glimpse(df)
 colnames(df)[7] <- "N_A" # change name col NA.
 df$EvA <- as.numeric(df$EvA)
 df$N_A <- as.numeric(df$N_A)
-df
-
+df$EvB <- as.numeric(df$EvB)
+df$NB <-  as.numeric(df$NB)
 
 ```
 
@@ -87,20 +81,23 @@ df
 
 # Meta-Analysis
 ```{r}
-meta1 <- metabin(EvA, NA., EvB, NB,
+meta1 <- metabin(N_A, EvA, NB, EvB,
                  data = df,
                  # subset = c(41,47,51,59), 
-                 studlab = paste(firstAuthor, year),
+                 studlab = paste(Comparison, firstAuthor,",",  year),
                  sm="RR", method="I")
 ```
 
+```{r}
+meta1
+```
 
-# Citas
+# Citations
 
 ```{r}
 citation()
 citation(package = "tidyverse")
 citation(package = "stringr")
-citation(package = "broom")
-citation(package = "editData")
+citation(package = "meta")
+
 ```
