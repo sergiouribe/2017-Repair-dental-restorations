@@ -1,42 +1,43 @@
 ---
 title: "2017 Repair dental restorations"
-author: Sergio Uribe
-date: "`r format(Sys.time(), '%d %B, %Y')`"
-
-output: 
-  html_notebook: 
+output:
+  html_notebook:
+    fig_caption: yes
     toc: yes
-    toc_float: true
-    fig_caption: true
+    toc_float: yes
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
 ---
+
+Data extracted was tabulated in a google sheet. Then exported as csv file and imported in R (R Core Team (2017). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL https://www.R-project.org/.)
+
+Data cleaning and organization was done with package tidyverse (Hadley Wickham (2017). tidyverse: Easily Install and Load the 'Tidyverse'. R package version 1.2.1.   https://CRAN.R-project.org/package=tidyverse).
+
+The package meta (Guido Schwarzer (2007), meta: An R package for meta-analysis, R News, 7(3), 40-45.) was used for the meta-analysis. A funnel plot was used to detect publication bias. The heterogenicity between studies was checked with I2 and visualized with a Baujat plot (Baujat B, Mahé C, Pignon JP, Hill C (2002), A graphical method for exploring heterogeneity in meta-analyses: Application to a meta-analysis of 65 trials. Statistics in Medicine, 30, 2641–2652.).  We grouped the studies with same intervention and control and considered any adverse outcome. A random effect meta-analysis using odds-ratio as outcome was performed with a Mantel-Haenzel method. A forest plot was used to visualize the overall effect of the interventions, with a 95% confidence interval.
+
+
+
 
 
 # Paquetes
 ```{r, include = F, echo = F}
-Packages <- c("tidyverse", "forcats", "stringr", "broom", "meta")
+Packages <- c("tidyverse", "broom", "meta")
 lapply(Packages, library, character.only = TRUE)
 rm(Packages)
 ```
 
 
 
-Plots
-```{r, include = F, echo = F}
-install.packages("devtools")
-
-devtools::install_github("gertstulp/ggplotgui")
-
-
-
-library("ggplotgui")
-```
-
-
 
 # Dataset
 
 ```{r}
-df <- read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vRSKuBlcQTVJK2fZyZ4Nvf4SwSqVrxcfAGhNhl6dWHU9W39oppE4Pl4lcPy-0CRGRTqQQ0IHwFgfrY8/pub?gid=0&single=true&output=csv")
+
+df <- read_csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vRSKuBlcQTVJK2fZyZ4Nvf4SwSqVrxcfAGhNhl6dWHU9W39oppE4Pl4lcPy-0CRGRTqQQ0IHwFgfrY8/pub?gid=0&single=true&output=csv")
 ```
 
 ## Data cleaning
@@ -51,6 +52,8 @@ df <- df %>% filter(str_detect(df$Comparison, "vs"),
                     !str_detect(EvA, "\\?"), 
                     !str_detect(EvA, "%") )
 
+df$firstAuthor <- str_trim(df$firstAuthor, "right")
+
 
 
 ```
@@ -63,41 +66,580 @@ df <- df %>% select(Comparison:Outcome) %>%
 create a new column id
 
 ```{r}
-df <-  mutate(df, id = paste(firstAuthor, year, sep = ", "))
+df <-  mutate(df, id = paste(firstAuthor, ", ", year, paper))
+
 ```
 
 ## Dataset clean
+Converting factors to numeric variables
+
 ```{r}
 glimpse(df)
-colnames(df)[7] <- "N_A" # change name col NA.
-df$EvA <- as.numeric(df$EvA)
-df$N_A <- as.numeric(df$N_A)
-df$EvB <- as.numeric(df$EvB)
-df$NB <-  as.numeric(df$NB)
+
+df$EvA <- as.integer(df$EvA)
+df$TotalA <- as.integer(df$TotalA)
+df$EvB <- as.integer(df$EvB)
+df$TotalB <- as.integer(df$TotalB)
+
+df <- df %>% 
+  mutate(groups = paste(Comparison, Outcome))
+
+```
+```{r}
+summary(df)
+
+```
+Create groups for comparisons
+
+Any intervention (Sealant, Refinishing or Repair) vs grouped comparison and grouped outcome
+```{r}
+df <- mutate(df, groups = paste( intervention_b, Outcome))
+table(df$groups)
+```
+
+
+# 1.  No-treatment MA (6)
+## Data selection
+```{r}
+data_meta <- df %>% 
+  filter(groups == "No-treatment MA")
+```
+```{r}
+meta1 <- metabin(EvA, TotalA, 
+                 EvB, TotalB, 
+                 data = data_meta,  
+                 sm = "OR",  method.tau = "DL", 
+                 comb.fixed = FALSE, 
+                 studlab = paste(firstAuthor, year, intervention_a))
 
 ```
 
 
+## Bias
 
-# Meta-Analysis
 ```{r}
-meta1 <- metabin(N_A, EvA, NB, EvB,
-                 data = df,
-                 # subset = c(41,47,51,59), 
-                 studlab = paste(Comparison, firstAuthor,",",  year),
-                 sm="RR", method="I")
+funnel.meta(meta1, 
+            studlab = TRUE)
+```
+
+
+## Heterogeneity
+
+```{r}
+
+baujat.meta(meta1, 
+            yscale = 10, xmin = 3, ymin = 10, 
+            cex.studlab = .50)
+```
+
+
+## Meta-analysis and forest plot
+```{r}
+summary(meta1)
 ```
 
 ```{r}
 meta1
 ```
+## Forest
+
+```{r}
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or ref.", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "No treatment",
+       col.label.right    = "darkred")
+
+```
+
+## Export
+
+```{r}
+png(filename = "1.png", 
+    type = "cairo",
+    units = "in", 
+    width = 10, 
+    height = 5, 
+    pointsize = 12, 
+    res = 96)
+
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or ref.", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "No treatment",
+       col.label.right    = "darkred")
+
+dev.off()
+```
+
+-------------------------------------------------------------------------------
+
+
+# 2. No-treatment SC (6)
+## Data selection
+```{r}
+data_meta <- df %>% 
+  filter(groups == "No-treatment SC")
+data_meta
+```
+```{r}
+meta1 <- metabin(EvA, TotalA, 
+                 EvB, TotalB, 
+                 data = data_meta,  
+                 sm = "OR",  method.tau = "DL", 
+                 comb.fixed = FALSE, 
+                 studlab = paste(firstAuthor, year, intervention_a))
+
+```
+
+
+## Bias
+
+```{r}
+funnel.meta(meta1, 
+            studlab = TRUE, 
+            cex.studlab = .55)
+```
+
+
+## Heterogeneity
+
+```{r}
+
+baujat.meta(meta1, 
+            yscale = 10, xmin = 3, ymin = 10, 
+            cex.studlab = .50)
+```
+
+
+## Meta-analysis and forest plot
+```{r}
+summary(meta1)
+```
+
+```{r}
+meta1
+```
+## Forest
+```{r}
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or refinishing", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "No treatment",
+       col.label.right    = "darkred")
+
+```
+
+## Export
+```{r}
+png(filename = "2.png", 
+    type = "cairo",
+    units = "in", 
+    width = 10, 
+    height = 5, 
+    pointsize = 12, 
+    res = 96)
+
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or refinishing", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "No treatment",
+       col.label.right    = "darkred")
+
+dev.off()
+
+```
+
+
+
+
+-------------------------------------------------------------------------------
+
+
+
+# 3. No-treatment TS (3)
+## Data selection
+```{r}
+data_meta <- df %>% 
+  filter(groups == "No-treatment TS")
+data_meta
+```
+```{r}
+meta1 <- metabin(EvA, TotalA, 
+                 EvB, TotalB, 
+                 data = data_meta,  
+                 sm = "OR",  method.tau = "DL", 
+                 comb.fixed = FALSE, 
+                 studlab = paste(firstAuthor, year, intervention_a))
+
+```
+
+
+## Bias
+
+```{r}
+funnel.meta(meta1, 
+            studlab = TRUE, 
+            cex.studlab = .55)
+```
+
+
+## Heterogeneity
+
+```{r}
+
+baujat.meta(meta1, 
+            yscale = 10, xmin = 3, ymin = 10, 
+            cex.studlab = .50)
+```
+
+
+## Meta-analysis and forest plot
+```{r}
+summary(meta1)
+```
+
+```{r}
+meta1
+```
+## Forest
+```{r}
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or refinish", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "No treatment",
+       col.label.right    = "darkred")
+
+```
+
+## Export
+```{r}
+png(filename = "3.png", 
+    type = "cairo",
+    units = "in", 
+    width = 10, 
+    height = 5, 
+    pointsize = 12, 
+    res = 96)
+
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or refinish", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "No treatment",
+       col.label.right    = "darkred")
+
+dev.off()
+
+```
+
+
+
+-------------------------------------------------------------------------------
+
+# 4. Replacement MA (5)
+## Data selection
+```{r}
+data_meta <- df %>% 
+  filter(groups == "Replacement MA")
+data_meta
+```
+```{r}
+meta1 <- metabin(EvA, TotalA, 
+                 EvB, TotalB, 
+                 data = data_meta,  
+                 sm = "OR",  method.tau = "DL", 
+                 comb.fixed = FALSE, 
+                 studlab = paste(firstAuthor, year, intervention_a))
+
+```
+
+
+## Bias
+
+```{r}
+funnel.meta(meta1, 
+            studlab = TRUE, 
+            cex.studlab = .55)
+```
+
+
+## Heterogeneity
+
+```{r}
+
+baujat.meta(meta1, 
+            yscale = 10, xmin = 3, ymin = 10, 
+            cex.studlab = .50)
+```
+
+
+## Meta-analysis and forest plot
+```{r}
+summary(meta1)
+```
+
+```{r}
+meta1
+```
+## Forest
+```{r}
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or repair", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "Replacement",
+       col.label.right    = "darkred")
+
+```
+
+
+## Export
+```{r}
+png(filename = "4.png", 
+    type = "cairo",
+    units = "in", 
+    width = 10, 
+    height = 5, 
+    pointsize = 12, 
+    res = 96)
+
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or repair", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "Replacement",
+       col.label.right    = "darkred")
+
+dev.off()
+
+```
+
+-------------------------------------------------------------------------------
+
+# 5. Replacement SC (5)
+## Data selection
+```{r}
+data_meta <- df %>% 
+  filter(groups == "Replacement SC")
+data_meta
+```
+```{r}
+meta1 <- metabin(EvA, TotalA, 
+                 EvB, TotalB, 
+                 data = data_meta,  
+                 sm = "OR",  method.tau = "DL", 
+                 comb.fixed = FALSE, 
+                 studlab = paste(firstAuthor, year, intervention_a))
+
+```
+
+
+## Bias
+
+```{r}
+funnel.meta(meta1, 
+            studlab = TRUE, 
+            cex.studlab = .55)
+```
+
+
+## Heterogeneity
+
+```{r}
+
+baujat.meta(meta1, 
+            yscale = 10, xmin = 3, ymin = 10, 
+            cex.studlab = .50)
+```
+
+
+## Meta-analysis and forest plot
+```{r}
+summary(meta1)
+```
+
+```{r}
+meta1
+```
+## Forest
+```{r}
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or repair", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "Replacement",
+       col.label.right    = "darkred")
+
+```
+
+## Export
+```{r}
+png(filename = "5.png", 
+    type = "cairo",
+    units = "in", 
+    width = 10, 
+    height = 5, 
+    pointsize = 12, 
+    res = 96)
+
+
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or repair", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "Replacement",
+       col.label.right    = "darkred")
+
+dev.off()
+
+```
+
+-------------------------------------------------------------------------------
+
+# 6. Replacement TS (5)
+## Data selection
+```{r}
+data_meta <- df %>% 
+  filter(groups == "Replacement TS")
+data_meta
+```
+```{r}
+meta1 <- metabin(EvA, TotalA, 
+                 EvB, TotalB, 
+                 data = data_meta,  
+                 sm = "OR",  method.tau = "DL", 
+                 comb.fixed = FALSE, 
+                 studlab = paste(firstAuthor, year, intervention_a))
+
+```
+
+
+## Bias
+
+```{r}
+funnel.meta(meta1, 
+            studlab = TRUE, 
+            cex.studlab = .55)
+```
+
+
+## Heterogeneity
+
+```{r}
+
+baujat.meta(meta1, 
+            yscale = 10, xmin = 3, ymin = 10, 
+            cex.studlab = .50)
+```
+
+
+## Meta-analysis and forest plot
+```{r}
+summary(meta1)
+```
+
+```{r}
+meta1
+```
+## Forest
+```{r}
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or repair", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "Replacement",
+       col.label.right    = "darkred")
+
+```
+
+
+## Export
+```{r}
+png(filename = "6.png", 
+    type = "cairo",
+    units = "in", 
+    width = 10, 
+    height = 5, 
+    pointsize = 12, 
+    res = 96)
+
+
+forest.meta(meta1,  
+       comb.fixed = FALSE,
+       sortvar = year, 
+       # LEFT
+       label.left         = "Seal or repair", 
+       col.label.left     = "darkgreen", 
+       # RIGHT
+       label.right        = "Replacement",
+       col.label.right    = "darkred")
+
+
+dev.off()
+
+```
+
+
+-------------------------------------------------------------------------------
+
+
+
 
 # Citations
 
 ```{r}
 citation()
 citation(package = "tidyverse")
-citation(package = "stringr")
 citation(package = "meta")
 
 ```
